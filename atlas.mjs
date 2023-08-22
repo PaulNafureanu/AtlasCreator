@@ -1,11 +1,10 @@
+#!C:\Program Files\nodejs
 import fs from "node:fs";
 import path from "node:path";
 import readline from "readline";
 import Jimp from "jimp";
 import potpack from "potpack";
-import { fileURLToPath } from "url";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = process.cwd();
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout, // Output to standard output (console)
