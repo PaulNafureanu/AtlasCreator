@@ -1,0 +1,1 @@
+Do not forget to set the environment variable path to the path containing the atlas.bat file
