@@ -27,6 +27,7 @@ interface AtlasOptions {
   output: string;
   atlas: string;
   map: string;
+  resize: string;
 }
 
 const argv = yargs
@@ -62,6 +63,14 @@ const argv = yargs
     demandOption: false,
     description: "Set the name and the extension [json] of the map file.",
   })
+  .option("resize", {
+    alias: "r",
+    type: "string",
+    default: "100%",
+    demandOption: false,
+    description:
+      "Set the default resize of textures to a power of two number or percentage.",
+  })
   .help().argv;
 
 createTextureAtlas(argv as AtlasOptions).catch((err) => {
@@ -73,6 +82,7 @@ async function createTextureAtlas({
   output,
   atlas: atlasName,
   map: mapName,
+  resize,
 }: AtlasOptions) {
   let textureFolder: string;
   if (input) {
@@ -101,22 +111,28 @@ async function createTextureAtlas({
     }
   } else outputFolder = input ? textureFolder : _dir;
 
-  console.log("Input: ", textureFolder);
-  console.log("Output: ", outputFolder);
-  console.log("Directory: ", _dir);
+  // console.log("Input: ", textureFolder);
+  // console.log("Output: ", outputFolder);
+  // console.log("Directory: ", _dir);
 
-  return;
+  let percentage: number | undefined;
+  let pixels: number | undefined;
+  if (resize.indexOf("%") >= 0) percentage = Number(resize.split("%")[0]) / 100;
+  else pixels = Number(resize.split("px")[0]);
 
-  const textureFiles = fs.readdirSync(textureFolder);
+  const rawTextureFiles = fs.readdirSync(textureFolder);
 
   const textureDataList: TextureData[] = [];
   const mapData: MapData = {};
 
-  const textureLen = textureFiles.length;
+  const textureLen = rawTextureFiles.length;
   let index = 1;
-  for (const textureFile of textureFiles) {
+  for (const textureFile of rawTextureFiles) {
     const texturePath = path.join(textureFolder, textureFile);
     const texture = await Jimp.read(texturePath);
+
+    if (percentage) texture.scale(percentage);
+    else if (pixels) texture.resize(pixels, Jimp.AUTO);
 
     textureDataList.push({
       w: texture.bitmap.width,
@@ -135,6 +151,13 @@ async function createTextureAtlas({
   console.log("Atlas W: ", w);
   console.log("Atlas H: ", h);
 
+  mapData[atlasName] = {
+    xPos: 0,
+    yPos: 0,
+    width: w,
+    height: h,
+  };
+
   textureDataList.forEach((textureData, index) => {
     const atlasTexture = new Jimp(textureData.w, textureData.h);
     const { data, name } = textureDataList[index];
@@ -148,7 +171,7 @@ async function createTextureAtlas({
       height: textureData.h,
     };
 
-    console.log("Texture map created: ", mapData[name]);
+    console.log(index, ":", textureLen, "Add data map : ", mapData[name]);
   });
 
   const atlasPath = path.join(outputFolder, atlasName);
