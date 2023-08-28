@@ -74,3 +74,13 @@ export function getResize(resize: string): {
 
   return { percentage, pixels, usePercentage };
 }
+
+export function findIndexesOfMaterials(obj: any, indexes: number[]) {
+  for (const key in obj) {
+    if (key === "index") indexes.push(obj[key]);
+    else if (typeof obj[key] === "object") {
+      findIndexesOfMaterials(obj[key], indexes);
+    }
+  }
+  return indexes;
+}

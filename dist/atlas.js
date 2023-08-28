@@ -6,7 +6,7 @@ import potpack from "potpack";
 import debugFactory from "debug";
 import argv from "./command.js";
 import errorHandler from "./errorhandler.js";
-import { getPathsFromArgv, getResize } from "./utils.js";
+import { findIndexesOfMaterials, getPathsFromArgv, getResize, } from "./utils.js";
 // Creating debug functions for various namespaces
 const debugPaths = debugFactory("paths");
 const debugRawTextures = debugFactory("default:Texture");
@@ -89,22 +89,43 @@ const getTextureDataList = async (rawTextureFiles, { resize, textureFolderPath }
 // Get the gltf file and prep data in a json format
 const getGLTFData = (gltfFilePath) => {
     let gltfFile = undefined;
-    let gltfPrepData = [];
+    let gltfPrepData = { images: [], materials: {} };
     let isGLTF = false;
     if (gltfFilePath) {
         // Get the gltf file in a json format
         gltfFile = JSON.parse(fs.readFileSync(gltfFilePath, "utf-8"));
+        if (!gltfFile.images)
+            throw new Error("The gltf file does not have an images property.");
+        if (!gltfFile.materials)
+            throw new Error("The gltf file does not have a materials property.");
+        if (!gltfFile.textures)
+            throw new Error("The gltf file does not have a textures property.");
         // Get some prep data needed for the parsing of the gltf json file
         gltfFile.images.forEach(({ uri }) => {
             // Get the name of the texture images linked in the gltf file and map them with the same index
-            gltfPrepData.push(path.basename(uri).split(".")[0]);
+            gltfPrepData.images.push(path.basename(uri).split(".")[0]);
         });
-        isGLTF = Object.keys(gltfFile).length > 0 && gltfPrepData.length > 0;
+        // Get for each material the image indexes used
+        gltfFile.materials.forEach((material) => {
+            gltfPrepData.materials[material.name] = {
+                imageIndexes: [],
+                textureIndexes: [],
+            };
+            // First, find the textures associated with each material
+            let textureIndexes = [];
+            textureIndexes = findIndexesOfMaterials(material, textureIndexes);
+            gltfPrepData.materials[material.name].textureIndexes = textureIndexes;
+            // Get the image source assosiacted with each texture and add it to an imageIndex list
+            let imageIndexes = textureIndexes.map((textureIndex) => gltfFile?.textures[textureIndex].source || 0);
+            gltfPrepData.materials[material.name].imageIndexes = imageIndexes;
+        });
+        // Check GLTF File validity
+        isGLTF = Object.keys(gltfFile).length > 0 && gltfPrepData.images.length > 0;
     }
     return { gltfFile, gltfPrepData, isGLTF };
 };
 const getMapAtlasData = (textureDataList, { rawTextureAtlas, atlasWidth, atlasHeight, isGLTF, gltfPrepData, }) => {
-    let mapData = [];
+    let mapData = { textures: [], materials: {} };
     const textureDataLen = textureDataList.length;
     let textureIndex = 1;
     textureDataList.forEach(({ x = 0, y = 0, w, h }, index) => {
@@ -124,18 +145,20 @@ const getMapAtlasData = (textureDataList, { rawTextureAtlas, atlasWidth, atlasHe
         //Defines where the texture map data instance is placed in the map data array
         if (isGLTF) {
             const searchFunction = (v) => name.split(".")[0] === v;
-            const indexImageFile = gltfPrepData.findIndex(searchFunction);
+            const indexImageFile = gltfPrepData.images.findIndex(searchFunction);
             if (indexImageFile >= 0)
-                mapData[indexImageFile] = textureMapData;
+                mapData.textures[indexImageFile] = textureMapData;
         }
         else
-            mapData.push(textureMapData);
+            mapData.textures.push(textureMapData);
         // Indicate the progress of the map data
         const progress = Math.round((textureIndex * 100) / textureDataLen);
         const indicatorMsg = `Map data added: `;
         debugDataMap([progress], indicatorMsg, name);
         textureIndex++;
     });
+    if (isGLTF)
+        mapData.materials = gltfPrepData.materials;
     return { textureAtlas: rawTextureAtlas, mapData };
 };
 const modifyAndWriteGLTFFile = (atlas, json, outputFolderPath, isGLTF, gltfFilePath, gltfFile) => {

@@ -1,8 +1,8 @@
 import chalk from "chalk";
 
 const errorHandler = (err: Error) => {
-  const errorMessages = [`Atlas could not be created. `, err];
-  console.error(chalk.red(...errorMessages));
+  console.error(chalk.red(`Atlas could not be created.`));
+  console.error(err);
 };
 
 export default errorHandler;
