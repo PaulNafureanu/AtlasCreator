@@ -84,3 +84,11 @@ export function findIndexesOfMaterials(obj: any, indexes: number[]) {
   }
   return indexes;
 }
+
+export function getTextureName(textureId: number) {
+  return `Texture${textureId || 0}`;
+}
+
+export function getDefaultMaterialName(materialId: number) {
+  return `_Mat${materialId || 0}`;
+}

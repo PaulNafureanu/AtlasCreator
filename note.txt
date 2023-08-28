@@ -1,1 +1,102 @@
 Do not forget to set the environment variable path to the path containing the atlas.bat file
+
+
+>> GLTF File
+The final look and changes done to the new.gltf file:
+
+1. The "images" array has a single item pointing to the uri of the atlas map
+
+Example of the final images array (has one item) in the new gtlf file:
+"images": [
+    {
+      "uri": "output\\atlas.png"
+    }
+]
+
+
+2. The textures in the "textures" array all have the source pointing to the index of the image atlas in
+the "images" array, that is 0 (i.e. texture.source = 0). They also have a new property "name" set to the string of 
+`Texture${indexTexture}`, where the indexTexture is the index of the texture in the "textures" array.
+
+Example of the final textures array with 27 items (textures) in the new gltf file:
+"textures": [
+    {
+      "sampler": 0,
+      "source": 0,
+      "name": "Texture0"
+    },
+    {
+      "sampler": 0,
+      "source": 0,
+      "name": "Texture1"
+    },
+    ...
+    {
+      "sampler": 0,
+      "source": 0,
+      "name": "Texture26"
+    },
+]
+
+3. These are all the modifications of the new gltf file. No other properties are modified.
+
+
+>> Map JSON File
+
+The map json object file has the following shape (use of typescript interface to define it):
+
+interface Map {
+    "atlas": { width: number; height: number },
+    "textures": {
+        [textureName: string]: {
+            "oldImageUsed": string,
+            "linkedMaterials": string[]
+            "offset": [number, number],
+            "repeat": [number, number],
+            "position": [number, number],
+            "scale": [number, number]
+      }
+    },
+    "materials": {
+        [materialName:string]:{
+            texturesUsed: string[]
+        }
+    }
+}
+
+
+An example of a map json object is:
+{
+  "atlas": {
+    "width": 5120,
+    "height": 6144
+  },
+  "textures": {
+    "Texture0": {
+      "oldImageUsed": "material_0_baseColor",
+      "linkedMaterials": ["material_0"],
+      "offset": [0, 0],
+      "repeat": [0.2, 0.3333333333333333],
+      "position": [0, 0],
+      "scale": [1024, 2048]
+    },
+    "Texture17": {
+      "oldImageUsed": "930_chromes_baseColor",
+      "linkedMaterials": ["930_chromes"],
+      "offset": [0.2, 0],
+      "repeat": [0.2, 0.16666666666666666],
+      "position": [1024, 0],
+      "scale": [1024, 1024]
+    },
+    ...
+  },
+  "materials": {
+    "material_0": {
+      "texturesUsed": ["Texture0"]
+    },
+    "930_plastics": {
+      "texturesUsed": ["Texture1", "Texture2"]
+    },
+    ...
+  }
+}

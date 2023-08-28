@@ -6,7 +6,7 @@ import potpack from "potpack";
 import debugFactory from "debug";
 import argv from "./command.js";
 import errorHandler from "./errorhandler.js";
-import { findIndexesOfMaterials, getPathsFromArgv, getResize, } from "./utils.js";
+import { findIndexesOfMaterials, getDefaultMaterialName, getPathsFromArgv, getResize, getTextureName, } from "./utils.js";
 // Creating debug functions for various namespaces
 const debugPaths = debugFactory("paths");
 const debugRawTextures = debugFactory("default:Texture");
@@ -15,7 +15,10 @@ const debugDataMap = debugFactory("default:DataMap");
 const debugFinal = debugFactory("default:Final");
 // Get the current director where the process is running
 const _dir = process.cwd();
-// A function to create a texture atlas with map, as well as to modify a gltf file.
+/**
+ * A function to create a texture atlas with a JSON map, as well as modifying the gltf file.
+ * @param argv an object having the user options read from the command line.
+ */
 const createTextureAtlas = async ({ input, output, atlas, map, resize, gltf, json, debug, }) => {
     //Set debuggers
     debugFactory.enable(`default:*,${debug}`);
@@ -25,19 +28,21 @@ const createTextureAtlas = async ({ input, output, atlas, map, resize, gltf, jso
     debugPaths("Output folder full path: ", outputFolderPath);
     debugPaths("Gltf file full path: ", gltfFilePath);
     debugPaths("Current directory full path: ", _dir);
-    // Read raw texture files and store their data into the texture data array
-    const rawTextureFiles = fs.readdirSync(textureFolderPath);
-    const textureDataListOptions = { resize, textureFolderPath };
-    const textureDataList = await getTextureDataList(rawTextureFiles, textureDataListOptions);
-    // Sort the dimensions of the textures and define the texture atlas dimensions.
-    const { w: atlasWidth, h: atlasHeight } = potpack(textureDataList);
+    // Read raw image files and store their data into the image data array
+    const rawImageFiles = fs.readdirSync(textureFolderPath);
+    const imageDataList = await getImageDataList(rawImageFiles, {
+        resize,
+        textureFolderPath,
+    });
+    // Sort the dimensions of the images and define the texture atlas dimensions.
+    const { w: atlasWidth, h: atlasHeight } = potpack(imageDataList);
     const rawTextureAtlas = new Jimp(atlasWidth, atlasHeight);
     debugTextureAtlas("Atlas Width (pixels): ", atlasWidth);
     debugTextureAtlas("Atlas Height (pixels): ", atlasHeight);
-    // Check if the gltf exists, prepares it and returns its data or empty objects
+    // Check if the gltf file exists, prepares it and returns its data or empty objects
     const { gltfFile, gltfPrepData, isGLTF } = getGLTFData(gltfFilePath);
-    // Create the texture atlas and the map data
-    const { textureAtlas, mapData } = getMapAtlasData(textureDataList, {
+    // Create the texture atlas and the map json data
+    const { textureAtlas, mapData } = getMapAtlasData(imageDataList, {
         rawTextureAtlas,
         atlasWidth,
         atlasHeight,
@@ -53,43 +58,69 @@ const createTextureAtlas = async ({ input, output, atlas, map, resize, gltf, jso
     fs.writeFileSync(mapDataPath, JSON.stringify(mapData, null, 2));
     debugFinal("Texture Atlas and Map created successfully.");
 };
-// Read raw texture files from the texture folder and return their formatted data as an array
-const getTextureDataList = async (rawTextureFiles, { resize, textureFolderPath }) => {
-    const rawTextureListLen = rawTextureFiles.length;
-    if (rawTextureListLen === 0)
+/**
+ * Read raw texture files from the texture folder and return their formatted data as an array
+ * @param rawImageFiles a list of raw files read by fs from the texture folder.
+ * @param resize the resize factor read from the console.
+ * @param textureFolderPath the full path to the texture folder used to read the files.
+ * @returns
+ */
+const getImageDataList = async (rawImageFiles, { resize, textureFolderPath }) => {
+    const imageFormatsSupported = ["jpeg", "png", "bmp", "tiff", "gif"];
+    const rawImageListLen = rawImageFiles.length;
+    if (rawImageListLen === 0)
         throw new Error("No texture images found in the texture folder.");
-    const textureDataList = [];
+    const imageDataList = [];
     let rawTextureIndex = 1;
     // Get the resize factor from resize string
     const { pixels, percentage, usePercentage } = getResize(resize);
-    for (const rawTextureFile of rawTextureFiles) {
-        // Get texture
-        const textureFilePath = path.join(textureFolderPath, rawTextureFile);
-        const texture = await Jimp.read(textureFilePath);
-        // Resize texture
+    for (const rawImageFile of rawImageFiles) {
+        // Check if the image format is supported
+        const [rawImageName, rawImageFormat] = rawImageFile.split(".");
+        if (!imageFormatsSupported.includes(rawImageFormat))
+            continue;
+        // Get image
+        const imageFilePath = path.join(textureFolderPath, rawImageFile);
+        const image = await Jimp.read(imageFilePath);
+        // Resize image
         if (usePercentage)
-            texture.scale(percentage);
+            image.scale(percentage);
         else
-            texture.resize(pixels, Jimp.AUTO);
-        // Add texture to the array
-        textureDataList.push({
-            w: texture.bitmap.width,
-            h: texture.bitmap.height,
-            data: texture.bitmap.data,
-            name: rawTextureFile,
+            image.resize(pixels, Jimp.AUTO);
+        // Add image to the image data array
+        imageDataList.push({
+            w: image.bitmap.width,
+            h: image.bitmap.height,
+            data: image.bitmap.data,
+            imageUsed: rawImageName,
         });
         // Set the debug message
-        const progress = `${rawTextureIndex} / ${rawTextureListLen}`;
+        const progress = `${rawTextureIndex} / ${rawImageListLen}`;
         const debugMsg = `Texture read: `;
-        debugRawTextures([progress], debugMsg, rawTextureFile);
+        debugRawTextures([progress], debugMsg, rawImageFile);
         rawTextureIndex++;
     }
-    return textureDataList;
+    const filesUnsupportedCount = rawImageListLen - rawTextureIndex;
+    if (filesUnsupportedCount > 0) {
+        debugRawTextures(`Files with unsupported format in the texture folder: ${filesUnsupportedCount}`);
+    }
+    return imageDataList;
 };
-// Get the gltf file and prep data in a json format
+/**
+ * Get the gltf file and prep gltf data in a json format
+ * @param gltfFilePath the full path to the gltf file
+ * @returns
+ */
 const getGLTFData = (gltfFilePath) => {
     let gltfFile = undefined;
-    let gltfPrepData = { images: [], materials: {} };
+    let gltfPrepData = {
+        imagesUsed: [],
+        texturesUsed: [],
+        materialsUsed: [],
+        texturesUsedByImage: {},
+        texturesUsedByMaterial: {},
+        materialsUsedByTexture: {}, // Store the name of the materials used sorted by image names
+    };
     let isGLTF = false;
     if (gltfFilePath) {
         // Get the gltf file in a json format
@@ -101,74 +132,118 @@ const getGLTFData = (gltfFilePath) => {
         if (!gltfFile.textures)
             throw new Error("The gltf file does not have a textures property.");
         // Get some prep data needed for the parsing of the gltf json file
-        gltfFile.images.forEach(({ uri }) => {
-            // Get the name of the texture images linked in the gltf file and map them with the same index
-            gltfPrepData.images.push(path.basename(uri).split(".")[0]);
+        // Get the name of the images used in the gltf file and map them to the same index
+        gltfFile.images?.forEach(({ uri }) => {
+            gltfPrepData.imagesUsed.push(path.basename(uri).split(".")[0]);
         });
-        // Get for each material the image indexes used
-        gltfFile.materials.forEach((material) => {
-            gltfPrepData.materials[material.name] = {
-                imageIndexes: [],
-                textureIndexes: [],
-            };
-            // First, find the textures associated with each material
+        // Get the name of the textures used in the gltf file and map them to the image they used
+        gltfFile.textures?.forEach((texture, index) => {
+            gltfPrepData.texturesUsed.push(getTextureName(index));
+            const imageUsed = gltfPrepData.imagesUsed[texture.source];
+            if (!gltfPrepData.texturesUsedByImage[imageUsed])
+                gltfPrepData.texturesUsedByImage[imageUsed] = [];
+            gltfPrepData.texturesUsedByImage[imageUsed].push(getTextureName(index));
+        });
+        // Get the name of the materials used in the gltf file and map them to the textures they used.
+        gltfFile.materials?.forEach((material, index) => {
+            gltfPrepData.materialsUsed.push(material.name || getDefaultMaterialName(index));
             let textureIndexes = [];
             textureIndexes = findIndexesOfMaterials(material, textureIndexes);
-            gltfPrepData.materials[material.name].textureIndexes = textureIndexes;
-            // Get the image source assosiacted with each texture and add it to an imageIndex list
-            let imageIndexes = textureIndexes.map((textureIndex) => gltfFile?.textures[textureIndex].source || 0);
-            gltfPrepData.materials[material.name].imageIndexes = imageIndexes;
+            textureIndexes.forEach((textureIndex) => {
+                const textureUsed = getTextureName(textureIndex);
+                if (!gltfPrepData.materialsUsedByTexture[textureUsed])
+                    gltfPrepData.materialsUsedByTexture[textureUsed] = [];
+                gltfPrepData.materialsUsedByTexture[textureUsed].push(material.name || getDefaultMaterialName(index));
+                if (!gltfPrepData.texturesUsedByMaterial[material.name || getDefaultMaterialName(index)]) {
+                    gltfPrepData.texturesUsedByMaterial[material.name || getDefaultMaterialName(index)] = [];
+                }
+                gltfPrepData.texturesUsedByMaterial[material.name || getDefaultMaterialName(index)].push(textureUsed);
+            });
         });
         // Check GLTF File validity
-        isGLTF = Object.keys(gltfFile).length > 0 && gltfPrepData.images.length > 0;
+        const isFile = Object.keys(gltfFile).length > 0;
+        const isImage = gltfPrepData.imagesUsed.length > 0;
+        const isTexture = gltfPrepData.texturesUsed.length > 0;
+        const isMaterial = gltfPrepData.materialsUsed.length > 0;
+        isGLTF = isFile && isImage && isTexture && isMaterial;
     }
     return { gltfFile, gltfPrepData, isGLTF };
 };
-const getMapAtlasData = (textureDataList, { rawTextureAtlas, atlasWidth, atlasHeight, isGLTF, gltfPrepData, }) => {
-    let mapData = { textures: [], materials: {} };
-    const textureDataLen = textureDataList.length;
-    let textureIndex = 1;
-    textureDataList.forEach(({ x = 0, y = 0, w, h }, index) => {
-        // Read a texture data, create a empty texture and insert the data into the texture atlas
-        const { data, name } = textureDataList[index];
+/**
+ *
+ * @param imageDataList a list of image data formatted from the raw image files read by fs
+ * @param config an object containing configurations for the atlas and gltf file
+ * @returns
+ */
+const getMapAtlasData = (imageDataList, { rawTextureAtlas, atlasWidth, atlasHeight, isGLTF, gltfPrepData, }) => {
+    let mapData = {
+        atlas: { width: atlasWidth, height: atlasHeight },
+        textures: {},
+        materials: {},
+    };
+    const imageDataLen = imageDataList.length;
+    imageDataList.forEach(({ x = 0, y = 0, w = 0, h = 0 }, index) => {
+        // Read a image data, create a empty texture and insert that data into the texture atlas
+        const { data, imageUsed } = imageDataList[index];
         const texture = new Jimp(w, h);
         texture.bitmap.data = data;
         rawTextureAtlas.blit(texture, x, y);
-        // Defines an instance of the map data based on the texture
+        // Defines an instance of the texture map data based on the image data
         const textureMapData = {
-            name: name,
+            oldImageUsed: imageUsed,
+            linkedMaterials: [],
             offset: [x / atlasWidth, y / atlasHeight],
             repeat: [w / atlasWidth, h / atlasHeight],
-            pos: [x, y],
+            position: [x, y],
             scale: [w, h],
         };
-        //Defines where the texture map data instance is placed in the map data array
+        //Defines how the texture map data instance is placed in the map data array
         if (isGLTF) {
-            const searchFunction = (v) => name.split(".")[0] === v;
-            const indexImageFile = gltfPrepData.images.findIndex(searchFunction);
-            if (indexImageFile >= 0)
-                mapData.textures[indexImageFile] = textureMapData;
+            const texturesUsedByImage = gltfPrepData.texturesUsedByImage[imageUsed] || [];
+            texturesUsedByImage.forEach((textureName) => {
+                const materialsUsedByTexture = gltfPrepData.materialsUsedByTexture[textureName] || [];
+                textureMapData.linkedMaterials = materialsUsedByTexture;
+                mapData.textures[textureName] = textureMapData;
+            });
         }
         else
-            mapData.textures.push(textureMapData);
+            mapData.textures[imageUsed] = textureMapData;
         // Indicate the progress of the map data
-        const progress = Math.round((textureIndex * 100) / textureDataLen);
+        const progress = Math.round(((index + 1) * 100) / imageDataLen);
         const indicatorMsg = `Map data added: `;
-        debugDataMap([progress], indicatorMsg, name);
-        textureIndex++;
+        debugDataMap([progress], indicatorMsg, imageUsed);
     });
-    if (isGLTF)
-        mapData.materials = gltfPrepData.materials;
+    // Insert materials information in the map data
+    if (isGLTF) {
+        gltfPrepData.materialsUsed.forEach((materialUsed) => {
+            mapData.materials[materialUsed] = {
+                texturesUsed: gltfPrepData.texturesUsedByMaterial[materialUsed],
+            };
+        });
+    }
     return { textureAtlas: rawTextureAtlas, mapData };
 };
+/**
+ *
+ * @param atlas the name and the format of the texture atlas useful at writting the final file by fs.
+ * @param json a flag for generating the version of the new gltf but in the JSON format.
+ * @param outputFolderPath the full path to the output folder to save the atlas and map files.
+ * @param isGLTF a check for the existence of the gltf file.
+ * @param gltfFilePath a full path to gltf file if it exists.
+ * @param gltfFile the gltf file read in json format by fs.
+ */
 const modifyAndWriteGLTFFile = (atlas, json, outputFolderPath, isGLTF, gltfFilePath, gltfFile) => {
     if (isGLTF && gltfFile) {
         // Modify the gltf images to point to the local atlas file
         gltfFile.images = [
             { uri: path.join(path.basename(outputFolderPath), atlas) },
         ];
-        // Modify the gltf textures to point to a single source for images, that is the atlas image
-        gltfFile.textures.forEach((texture) => (texture.source = 0));
+        // Modify the gltf textures to point to a single source for images, the atlas image.
+        // Add (or change) names for textures.
+        gltfFile.textures?.forEach((texture, index) => {
+            texture.name = getTextureName(index);
+            texture.source = 0;
+        });
         //Create a new gltf file with the above modifications
         const dirPath = path.dirname(gltfFilePath || _dir);
         const newGltfFileName = "new" + path.basename(gltfFilePath || _dir);
@@ -179,7 +254,7 @@ const modifyAndWriteGLTFFile = (atlas, json, outputFolderPath, isGLTF, gltfFileP
             const newGltfJsonFileName = newGltfFileName.split(".")[0] + ".json";
             const newGltfJsonPathFile = path.join(dirPath, newGltfJsonFileName);
             fs.writeFileSync(newGltfJsonPathFile, JSON.stringify(gltfFile, null, 2));
-            debugFinal("GLTF Json File created successfully: ", newGltfJsonFileName);
+            debugFinal("GLTF JSON File created successfully: ", newGltfJsonFileName);
         }
     }
 };
