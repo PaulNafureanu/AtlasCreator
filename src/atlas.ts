@@ -13,6 +13,7 @@ import {
   getPathsFromArgv,
   getResize,
   getTextureName,
+  updateArray,
 } from "./utils.js";
 
 interface RawImageData {
@@ -251,9 +252,11 @@ const getGLTFData = (
     gltfFile.textures?.forEach((texture, index) => {
       gltfPrepData.texturesUsed.push(getTextureName(index));
       const imageUsed = gltfPrepData.imagesUsed[texture.source];
-      if (!gltfPrepData.texturesUsedByImage[imageUsed])
-        gltfPrepData.texturesUsedByImage[imageUsed] = [];
-      gltfPrepData.texturesUsedByImage[imageUsed].push(getTextureName(index));
+      gltfPrepData.texturesUsedByImage = updateArray(
+        gltfPrepData.texturesUsedByImage,
+        imageUsed,
+        getTextureName(index)
+      );
     });
 
     // Get the name of the materials used in the gltf file and map them to the textures they used.
@@ -265,23 +268,18 @@ const getGLTFData = (
       textureIndexes = findIndexesOfMaterials(material, textureIndexes);
       textureIndexes.forEach((textureIndex) => {
         const textureUsed = getTextureName(textureIndex);
-        if (!gltfPrepData.materialsUsedByTexture[textureUsed])
-          gltfPrepData.materialsUsedByTexture[textureUsed] = [];
-        gltfPrepData.materialsUsedByTexture[textureUsed].push(
+
+        gltfPrepData.materialsUsedByTexture = updateArray(
+          gltfPrepData.materialsUsedByTexture,
+          textureUsed,
           material.name || getDefaultMaterialName(index)
         );
-        if (
-          !gltfPrepData.texturesUsedByMaterial[
-            material.name || getDefaultMaterialName(index)
-          ]
-        ) {
-          gltfPrepData.texturesUsedByMaterial[
-            material.name || getDefaultMaterialName(index)
-          ] = [];
-        }
-        gltfPrepData.texturesUsedByMaterial[
-          material.name || getDefaultMaterialName(index)
-        ].push(textureUsed);
+
+        gltfPrepData.texturesUsedByMaterial = updateArray(
+          gltfPrepData.texturesUsedByMaterial,
+          material.name || getDefaultMaterialName(index),
+          textureUsed
+        );
       });
     });
 

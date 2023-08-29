@@ -92,3 +92,10 @@ export function getTextureName(textureId: number) {
 export function getDefaultMaterialName(materialId: number) {
   return `_Mat${materialId || 0}`;
 }
+
+export function updateArray(arr: any, key: keyof any, newElement: any) {
+  if (!arr) return arr;
+  if (!arr[key]) arr[key] = [];
+  if (!arr[key].includes(newElement)) arr[key].push(newElement);
+  return arr;
+}
