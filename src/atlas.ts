@@ -41,7 +41,7 @@ interface TextureMapData {
 }
 
 interface MaterialMapData {
-  texturesUsed: string[];
+  texturesUsed: TextureUsedInMat[];
 }
 
 interface GLTFFile {
@@ -64,9 +64,13 @@ interface GLTFPrepData {
   texturesUsed: string[];
   materialsUsed: string[];
   texturesUsedByImage: { [imageName: string]: string[] };
-  texturesUsedByMaterial: { [materialName: string]: string[] };
+  texturesUsedByMaterial: {
+    [materialName: string]: TextureUsedInMat[];
+  };
   materialsUsedByTexture: { [textureName: string]: string[] };
 }
+
+type TextureUsedInMat = { name: string; type: string; index: number };
 
 // Creating debug functions for various namespaces
 const debugPaths = debugFactory("paths");
@@ -260,24 +264,29 @@ const getGLTFData = (
     });
 
     // Get the name of the materials used in the gltf file and map them to the textures they used.
-    gltfFile.materials?.forEach((material, index) => {
+    gltfFile.materials?.forEach((material, indexMat) => {
       gltfPrepData.materialsUsed.push(
-        material.name || getDefaultMaterialName(index)
+        material.name || getDefaultMaterialName(indexMat)
       );
-      let textureIndexes: number[] = [];
-      textureIndexes = findIndexesOfMaterials(material, textureIndexes);
-      textureIndexes.forEach((textureIndex) => {
-        const textureUsed = getTextureName(textureIndex);
+      let textures: { index: number; type: string }[] = [];
+      textures = findIndexesOfMaterials(material, textures);
+      textures.forEach(({ index, type }) => {
+        // const textureUsed = getTextureName(texture.index);
+        const textureUsed: TextureUsedInMat = {
+          name: getTextureName(index),
+          type,
+          index,
+        };
 
         gltfPrepData.materialsUsedByTexture = updateArray(
           gltfPrepData.materialsUsedByTexture,
-          textureUsed,
-          material.name || getDefaultMaterialName(index)
+          textureUsed.name,
+          material.name || getDefaultMaterialName(indexMat)
         );
 
         gltfPrepData.texturesUsedByMaterial = updateArray(
           gltfPrepData.texturesUsedByMaterial,
-          material.name || getDefaultMaterialName(index),
+          material.name || getDefaultMaterialName(indexMat),
           textureUsed
         );
       });

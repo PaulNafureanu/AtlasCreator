@@ -143,14 +143,19 @@ const getGLTFData = (gltfFilePath) => {
             gltfPrepData.texturesUsedByImage = updateArray(gltfPrepData.texturesUsedByImage, imageUsed, getTextureName(index));
         });
         // Get the name of the materials used in the gltf file and map them to the textures they used.
-        gltfFile.materials?.forEach((material, index) => {
-            gltfPrepData.materialsUsed.push(material.name || getDefaultMaterialName(index));
-            let textureIndexes = [];
-            textureIndexes = findIndexesOfMaterials(material, textureIndexes);
-            textureIndexes.forEach((textureIndex) => {
-                const textureUsed = getTextureName(textureIndex);
-                gltfPrepData.materialsUsedByTexture = updateArray(gltfPrepData.materialsUsedByTexture, textureUsed, material.name || getDefaultMaterialName(index));
-                gltfPrepData.texturesUsedByMaterial = updateArray(gltfPrepData.texturesUsedByMaterial, material.name || getDefaultMaterialName(index), textureUsed);
+        gltfFile.materials?.forEach((material, indexMat) => {
+            gltfPrepData.materialsUsed.push(material.name || getDefaultMaterialName(indexMat));
+            let textures = [];
+            textures = findIndexesOfMaterials(material, textures);
+            textures.forEach(({ index, type }) => {
+                // const textureUsed = getTextureName(texture.index);
+                const textureUsed = {
+                    name: getTextureName(index),
+                    type,
+                    index,
+                };
+                gltfPrepData.materialsUsedByTexture = updateArray(gltfPrepData.materialsUsedByTexture, textureUsed.name, material.name || getDefaultMaterialName(indexMat));
+                gltfPrepData.texturesUsedByMaterial = updateArray(gltfPrepData.texturesUsedByMaterial, material.name || getDefaultMaterialName(indexMat), textureUsed);
             });
         });
         // Check GLTF File validity

@@ -75,14 +75,19 @@ export function getResize(resize: string): {
   return { percentage, pixels, usePercentage };
 }
 
-export function findIndexesOfMaterials(obj: any, indexes: number[]) {
+export function findIndexesOfMaterials(
+  obj: any,
+  textures: { index: number; type: string }[] = [],
+  debug: boolean = false
+) {
   for (const key in obj) {
-    if (key === "index") indexes.push(obj[key]);
+    if (key.toLowerCase().includes("texture") && obj[key]["index"] >= 0)
+      textures.push({ index: obj[key]["index"], type: key });
     else if (typeof obj[key] === "object") {
-      findIndexesOfMaterials(obj[key], indexes);
+      findIndexesOfMaterials(obj[key], textures, debug);
     }
   }
-  return indexes;
+  return textures;
 }
 
 export function getTextureName(textureId: number) {
