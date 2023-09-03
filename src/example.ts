@@ -4,6 +4,7 @@ let scene: any;
 let gltfLoader: any;
 let RepeatWrapping: any;
 
+// Make the key to type from the map's texture types
 const keyToType = {
   map: "baseColorTexture",
   roughnessMap: "metallicRoughnessTexture",

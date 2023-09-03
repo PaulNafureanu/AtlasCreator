@@ -117,6 +117,7 @@ const getGLTFData = (gltfFilePath) => {
         imagesUsed: [],
         texturesUsed: [],
         materialsUsed: [],
+        textureTypes: [],
         texturesUsedByImage: {},
         texturesUsedByMaterial: {},
         materialsUsedByTexture: {}, // Store the name of the materials used sorted by image names
@@ -142,6 +143,8 @@ const getGLTFData = (gltfFilePath) => {
             const imageUsed = gltfPrepData.imagesUsed[texture.source];
             gltfPrepData.texturesUsedByImage = updateArray(gltfPrepData.texturesUsedByImage, imageUsed, getTextureName(index));
         });
+        // Init the texture types to save them
+        let textureTypes = [];
         // Get the name of the materials used in the gltf file and map them to the textures they used.
         gltfFile.materials?.forEach((material, indexMat) => {
             gltfPrepData.materialsUsed.push(material.name || getDefaultMaterialName(indexMat));
@@ -154,10 +157,17 @@ const getGLTFData = (gltfFilePath) => {
                     type,
                     index,
                 };
+                if (!textureTypes.includes(type))
+                    textureTypes.push(type);
                 gltfPrepData.materialsUsedByTexture = updateArray(gltfPrepData.materialsUsedByTexture, textureUsed.name, material.name || getDefaultMaterialName(indexMat));
                 gltfPrepData.texturesUsedByMaterial = updateArray(gltfPrepData.texturesUsedByMaterial, material.name || getDefaultMaterialName(indexMat), textureUsed);
             });
+            if (textures.length === 0) {
+                gltfPrepData.texturesUsedByMaterial[material.name || getDefaultMaterialName(indexMat)] = [];
+            }
         });
+        // Store the texture types
+        gltfPrepData.textureTypes = textureTypes;
         // Check GLTF File validity
         const isFile = Object.keys(gltfFile).length > 0;
         const isImage = gltfPrepData.imagesUsed.length > 0;
@@ -177,6 +187,7 @@ const getMapAtlasData = (imageDataList, { rawTextureAtlas, atlasWidth, atlasHeig
     let mapData = {
         atlas: { width: atlasWidth, height: atlasHeight },
         textures: {},
+        textureTypes: [],
         materials: {},
     };
     const imageDataLen = imageDataList.length;
@@ -213,6 +224,7 @@ const getMapAtlasData = (imageDataList, { rawTextureAtlas, atlasWidth, atlasHeig
     });
     // Insert materials information in the map data
     if (isGLTF) {
+        mapData.textureTypes = gltfPrepData.textureTypes;
         gltfPrepData.materialsUsed.forEach((materialUsed) => {
             mapData.materials[materialUsed] = {
                 texturesUsed: gltfPrepData.texturesUsedByMaterial[materialUsed],
